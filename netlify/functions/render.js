@@ -46,6 +46,20 @@ const extractSlug = (req) => {
   let slug = normalizeSlug(url.searchParams.get('slug'))
   if (slug) return slug
 
+  const pathParam = url.searchParams.get('path') || url.searchParams.get('splat')
+  if (pathParam) {
+    const parts = `${pathParam}`.split('/').filter(Boolean)
+    if (parts[0] === 'sites') return normalizeSlug(parts[1])
+    return normalizeSlug(parts[0])
+  }
+
+  const pathParts = url.pathname.split('/').filter(Boolean)
+  const renderIdx = pathParts.findIndex((p) => p === 'render')
+  if (renderIdx !== -1) {
+    const candidate = pathParts[renderIdx + 1]
+    if (candidate) return normalizeSlug(candidate)
+  }
+
   const originalPath =
     req.headers.get('x-nf-original-path') ||
     req.headers.get('x-original-path') ||
