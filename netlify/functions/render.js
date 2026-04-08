@@ -41,12 +41,21 @@ const getStoreWithFallback = () => {
   return getStore('sites')
 }
 
+const safeDecode = (value) => {
+  if (!value) return ''
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 const extractSlug = (req) => {
   const url = new URL(req.url)
-  let slug = normalizeSlug(url.searchParams.get('slug'))
+  let slug = normalizeSlug(safeDecode(url.searchParams.get('slug')))
   if (slug) return slug
 
-  const pathParam = url.searchParams.get('path') || url.searchParams.get('splat')
+  const pathParam = safeDecode(url.searchParams.get('path') || url.searchParams.get('splat'))
   if (pathParam) {
     const parts = `${pathParam}`.split('/').filter(Boolean)
     if (parts[0] === 'sites') return normalizeSlug(parts[1])
@@ -56,7 +65,7 @@ const extractSlug = (req) => {
   const pathParts = url.pathname.split('/').filter(Boolean)
   const renderIdx = pathParts.findIndex((p) => p === 'render')
   if (renderIdx !== -1) {
-    const candidate = pathParts[renderIdx + 1]
+    const candidate = safeDecode(pathParts[renderIdx + 1])
     if (candidate) return normalizeSlug(candidate)
   }
 
@@ -66,7 +75,7 @@ const extractSlug = (req) => {
     req.headers.get('x-forwarded-uri')
   if (!originalPath) return ''
 
-  const cleanPath = originalPath.split('?')[0]
+  const cleanPath = safeDecode(originalPath).split('?')[0]
   const parts = cleanPath.split('/').filter(Boolean)
   if (!parts.length) return ''
   if (parts[0] === 'sites') return normalizeSlug(parts[1])
