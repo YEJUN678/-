@@ -7,11 +7,11 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const jsonResponse = (statusCode, data) => ({
-  statusCode,
-  headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders },
-  body: JSON.stringify(data),
-})
+const jsonResponse = (statusCode, data) =>
+  new Response(JSON.stringify(data), {
+    status: statusCode,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders },
+  })
 
 const safeParse = (value) => {
   try {
@@ -19,6 +19,21 @@ const safeParse = (value) => {
   } catch {
     return null
   }
+}
+
+const getEnv = (key) => {
+  if (typeof Netlify !== 'undefined' && Netlify.env?.get) return Netlify.env.get(key)
+  if (typeof process !== 'undefined') return process.env?.[key]
+  return undefined
+}
+
+const getStoreWithFallback = () => {
+  const siteID = getEnv('BLOBS_SITE_ID')
+  const token = getEnv('BLOBS_TOKEN')
+  if (siteID && token) {
+    return getStore('sites', { siteID, token })
+  }
+  return getStore('sites')
 }
 
 const findAvailableSlug = async (store, base) => {
@@ -34,17 +49,17 @@ const findAvailableSlug = async (store, base) => {
   return `${seed}-${Date.now().toString(36)}`
 }
 
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: corsHeaders, body: '' }
+export default async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('', { status: 204, headers: corsHeaders })
   }
-  if (event.httpMethod !== 'POST') {
+  if (req.method !== 'POST') {
     return jsonResponse(405, { ok: false, error: 'Method not allowed' })
   }
 
   let payload = {}
   try {
-    payload = JSON.parse(event.body || '{}')
+    payload = await req.json()
   } catch {
     return jsonResponse(400, { ok: false, error: 'Invalid JSON body' })
   }
@@ -53,7 +68,7 @@ export const handler = async (event) => {
   const config = payload.config && typeof payload.config === 'object' ? payload.config : {}
   const requestedSlug = normalizeSlug(payload.slug)
 
-  const store = getStore('sites')
+  const store = getStoreWithFallback()
   let slug = requestedSlug
   let existingRaw = null
 

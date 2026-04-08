@@ -2,11 +2,8 @@ import { getStore } from '@netlify/blobs'
 import { generateHTML } from '../../src/engine/templateEngine.js'
 import { normalizeSlug } from '../../src/utils/slug.js'
 
-const htmlResponse = (statusCode, body) => ({
-  statusCode,
-  headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  body,
-})
+const htmlResponse = (statusCode, body) =>
+  new Response(body, { status: statusCode, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
 
 const notFoundHtml = (slug) => `<!DOCTYPE html>
 <html lang="ko">
@@ -29,17 +26,33 @@ const notFoundHtml = (slug) => `<!DOCTYPE html>
   </body>
 </html>`
 
-export const handler = async (event) => {
-  if (event.httpMethod !== 'GET') {
+const getEnv = (key) => {
+  if (typeof Netlify !== 'undefined' && Netlify.env?.get) return Netlify.env.get(key)
+  if (typeof process !== 'undefined') return process.env?.[key]
+  return undefined
+}
+
+const getStoreWithFallback = () => {
+  const siteID = getEnv('BLOBS_SITE_ID')
+  const token = getEnv('BLOBS_TOKEN')
+  if (siteID && token) {
+    return getStore('sites', { siteID, token })
+  }
+  return getStore('sites')
+}
+
+export default async (req) => {
+  if (req.method !== 'GET') {
     return htmlResponse(405, notFoundHtml(''))
   }
 
-  const slug = normalizeSlug(event.queryStringParameters?.slug)
+  const url = new URL(req.url)
+  const slug = normalizeSlug(url.searchParams.get('slug'))
   if (!slug) {
     return htmlResponse(400, notFoundHtml(''))
   }
 
-  const store = getStore('sites')
+  const store = getStoreWithFallback()
   const raw = await store.get(slug)
   if (raw === null) {
     return htmlResponse(404, notFoundHtml(slug))
