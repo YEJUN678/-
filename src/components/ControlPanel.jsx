@@ -5,6 +5,7 @@ import SiteManager from './SiteManager'
 import { TEMPLATE_LIST } from '../engine/presets'
 import { BASE_SECTION_ORDER, SECTION_LABELS } from '../engine/sections'
 import { generateHTML } from '../engine/templateEngine'
+import { makeUniqueSlug, normalizeSlug } from '../utils/slug'
 
 const FONTS = [
   'Noto Sans KR',
@@ -126,13 +127,7 @@ function Section({ title, children, defaultOpen = true }) {
   )
 }
 
-const slugify = (value, fallback) => {
-  const cleaned = `${value || ''}`
-    .trim()
-    .replace(/[^a-zA-Z0-9ㄱ-ㅎ가-힣]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return (cleaned || fallback || 'site').slice(0, 40)
-}
+const pickSlug = (value, fallback) => normalizeSlug(value) || normalizeSlug(fallback) || 'site'
 
 const escapeHtml = (value) =>
   `${value || ''}`
@@ -220,8 +215,13 @@ export default function ControlPanel({
   onDuplicateSite,
   onRenameSite,
   onDeleteSite,
+  onUpdateSiteSlug,
 }) {
   const [jsonText, setJsonText] = useState('')
+  const [publishState, setPublishState] = useState({ status: 'idle', message: '' })
+  const [publishedUrl, setPublishedUrl] = useState('')
+  const [importSlug, setImportSlug] = useState('')
+  const [importState, setImportState] = useState({ status: 'idle', message: '' })
   const S = {
     wrap: {
       padding: '1rem',
@@ -252,6 +252,12 @@ export default function ControlPanel({
       color: on ? '#fff' : '#c5c9e4',
     }),
   }
+
+  const currentSite = sites.find((site) => site.id === currentSiteId) || sites[0]
+  const currentSlug = currentSite ? currentSite.slug || pickSlug(currentSite.name, 'site') : ''
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const publicUrl = currentSlug && origin ? `${origin}/${currentSlug}` : ''
+  const displayUrl = publishedUrl || publicUrl
 
   const visibilityKeys = {
     hero: 'showHero',
@@ -295,7 +301,7 @@ export default function ControlPanel({
     if (window.showDirectoryPicker) {
       try {
         const dir = await window.showDirectoryPicker()
-        const slug = slugify(current.name, 'site')
+        const slug = pickSlug(current.slug || current.name, 'site')
         await writeFile(dir, [slug, 'index.html'], html)
         alert('내보내기가 완료되었습니다.')
         return
@@ -303,17 +309,23 @@ export default function ControlPanel({
         // fall through to download
       }
     }
-    downloadFile(`${slugify(current.name, 'site')}.html`, html)
+    downloadFile(`${pickSlug(current.slug || current.name, 'site')}.html`, html)
   }
 
   const exportAllSites = async () => {
     if (!sites.length) return
-    const entries = sites.map((site, idx) => ({
-      id: site.id,
-      name: site.name || `내 사이트 ${idx + 1}`,
-      slug: slugify(site.name, `site-${idx + 1}`),
-      html: generateHTML(site.config),
-    }))
+    const used = new Set()
+    const entries = sites.map((site, idx) => {
+      const name = site.name || `내 사이트 ${idx + 1}`
+      const slug = makeUniqueSlug(site.slug || name, used, `site-${idx + 1}`)
+      used.add(slug)
+      return {
+        id: site.id,
+        name,
+        slug,
+        html: generateHTML(site.config),
+      }
+    })
     if (window.showDirectoryPicker) {
       try {
         const dir = await window.showDirectoryPicker()
@@ -331,7 +343,9 @@ export default function ControlPanel({
   }
 
   const exportSitesJson = () => {
-    downloadJson('sites.json', { sites: sites.map((site) => ({ id: site.id, name: site.name, config: site.config })) })
+    downloadJson('sites.json', {
+      sites: sites.map((site) => ({ id: site.id, name: site.name, slug: site.slug, config: site.config })),
+    })
   }
 
   const updateCustomSection = (idx, patch) => {
@@ -373,6 +387,73 @@ export default function ControlPanel({
     await navigator.clipboard.writeText(JSON.stringify(config, null, 2))
   }
 
+  const publishSite = async () => {
+    if (!currentSite) return
+    const slug = normalizeSlug(currentSlug || currentSite.name)
+    if (!slug) {
+      setPublishState({ status: 'error', message: '사이트 주소를 먼저 입력해주세요.' })
+      return
+    }
+    setPublishState({ status: 'loading', message: '발행 중...' })
+    try {
+      const res = await fetch('/.netlify/functions/save-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: currentSite.name, slug, config }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.site) {
+        throw new Error(data?.error || '발행에 실패했습니다.')
+      }
+      const nextSlug = data.site.slug || slug
+      if (nextSlug && nextSlug !== currentSite.slug) {
+        onUpdateSiteSlug?.(currentSite.id, nextSlug)
+      }
+      const url = origin ? `${origin}/${nextSlug}` : ''
+      setPublishedUrl(url)
+      setPublishState({ status: 'success', message: '발행 완료' })
+    } catch (err) {
+      setPublishState({ status: 'error', message: err.message || '발행에 실패했습니다.' })
+    }
+  }
+
+  const copyPublishUrl = async () => {
+    if (!displayUrl) return
+    try {
+      await navigator.clipboard.writeText(displayUrl)
+      setPublishState({ status: 'success', message: '주소가 복사되었습니다.' })
+    } catch {
+      setPublishState({ status: 'error', message: '주소 복사에 실패했습니다.' })
+    }
+  }
+
+  const loadPublishedSite = async () => {
+    if (!currentSite) return
+    const slug = normalizeSlug(importSlug)
+    if (!slug) {
+      setImportState({ status: 'error', message: '불러올 주소를 입력해주세요.' })
+      return
+    }
+    setImportState({ status: 'loading', message: '불러오는 중...' })
+    try {
+      const res = await fetch(`/.netlify/functions/get-site?slug=${encodeURIComponent(slug)}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.site) {
+        throw new Error(data?.error || '불러오기에 실패했습니다.')
+      }
+      if (data.site?.config) {
+        onReplace(data.site.config)
+      }
+      if (data.site?.name) {
+        onRenameSite?.(currentSite.id, data.site.name)
+      }
+      onUpdateSiteSlug?.(currentSite.id, data.site.slug || slug)
+      setImportState({ status: 'success', message: '불러오기 완료' })
+    } catch (err) {
+      setImportState({ status: 'error', message: err.message || '불러오기에 실패했습니다.' })
+    }
+  }
+
   return (
     <div style={S.wrap}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
@@ -395,6 +476,112 @@ export default function ControlPanel({
           onRename={onRenameSite}
           onDelete={onDeleteSite}
         />
+        {currentSite && (
+          <div
+            style={{
+              marginTop: '0.6rem',
+              padding: '0.6rem',
+              borderRadius: '8px',
+              border: '1px solid #2a3158',
+              background: '#0f1324',
+              display: 'grid',
+              gap: '0.4rem',
+            }}
+          >
+            <label style={S.label}>사이트 주소(슬러그)</label>
+            <input
+              style={S.input}
+              value={currentSlug}
+              onChange={(e) => onUpdateSiteSlug?.(currentSite.id, e.target.value)}
+              placeholder="예: my-brand"
+            />
+            <div style={{ color: '#8b93b5', fontSize: '0.72rem' }}>
+              예시: https://your-site.netlify.app/{currentSlug || '주소'}
+            </div>
+            <div style={{ color: '#6b7280', fontSize: '0.7rem' }}>
+              한글/영문/숫자/하이픈만 가능하고, 공백은 자동으로 - 로 바뀝니다.
+            </div>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => onUpdateSiteSlug?.(currentSite.id, currentSite.name)}
+                style={S.button(false)}
+              >
+                이름으로 자동 설정
+              </button>
+            </div>
+            <div style={{ display: 'grid', gap: '0.45rem', marginTop: '0.4rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#fff' }}>자동 발행</div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={publishSite}
+                  disabled={publishState.status === 'loading'}
+                  style={{ ...S.button(false), opacity: publishState.status === 'loading' ? 0.6 : 1 }}
+                >
+                  발행하기
+                </button>
+                <button
+                  onClick={copyPublishUrl}
+                  disabled={!displayUrl}
+                  style={{ ...S.button(false), opacity: displayUrl ? 1 : 0.5 }}
+                >
+                  주소 복사
+                </button>
+                <button
+                  onClick={() => displayUrl && window.open(displayUrl, '_blank', 'noopener')}
+                  disabled={!displayUrl}
+                  style={{ ...S.button(false), opacity: displayUrl ? 1 : 0.5 }}
+                >
+                  주소 열기
+                </button>
+              </div>
+              {displayUrl && (
+                <div style={{ color: '#8b93b5', fontSize: '0.74rem', wordBreak: 'break-all' }}>
+                  {displayUrl}
+                </div>
+              )}
+              {publishState.message && (
+                <div
+                  style={{
+                    color: publishState.status === 'error' ? '#fca5a5' : '#6ee7b7',
+                    fontSize: '0.72rem',
+                  }}
+                >
+                  {publishState.message}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'grid', gap: '0.45rem', marginTop: '0.3rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#fff' }}>
+                발행된 사이트 불러오기
+              </div>
+              <input
+                style={S.input}
+                value={importSlug}
+                onChange={(e) => setImportSlug(e.target.value)}
+                placeholder="슬러그 입력 (예: my-brand)"
+              />
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={loadPublishedSite}
+                  disabled={importState.status === 'loading'}
+                  style={{ ...S.button(false), opacity: importState.status === 'loading' ? 0.6 : 1 }}
+                >
+                  불러오기
+                </button>
+              </div>
+              {importState.message && (
+                <div
+                  style={{
+                    color: importState.status === 'error' ? '#fca5a5' : '#6ee7b7',
+                    fontSize: '0.72rem',
+                  }}
+                >
+                  {importState.message}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </Section>
 
       <Section title="템플릿">

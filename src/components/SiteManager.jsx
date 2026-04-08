@@ -63,7 +63,10 @@ export default function SiteManager({
                 fontSize: '0.82rem',
               }}
             >
-              {site.name}
+              <div style={{ display: 'grid', gap: '0.1rem' }}>
+                <div>{site.name}</div>
+                {site.slug && <div style={{ fontSize: '0.7rem', color: '#8b93b5' }}>/{site.slug}</div>}
+              </div>
             </button>
             <button onClick={() => handleDuplicate(site)} style={{ background: 'transparent', border: 'none', color: '#8b93b5', cursor: 'pointer', fontSize: '0.72rem' }}>복제</button>
             <button onClick={() => handleRename(site)} style={{ background: 'transparent', border: 'none', color: '#8b93b5', cursor: 'pointer', fontSize: '0.72rem' }}>이름</button>

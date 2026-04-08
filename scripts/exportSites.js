@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { generateHTML } from '../src/engine/templateEngine.js'
+import { makeUniqueSlug } from '../src/utils/slug.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -9,14 +10,6 @@ const rootDir = path.resolve(__dirname, '..')
 const dataPath = path.join(rootDir, 'data', 'sites.json')
 const publicDir = path.join(rootDir, 'public')
 const sitesDir = path.join(publicDir, 'sites')
-
-const slugify = (value, fallback = 'site') => {
-  const cleaned = `${value || ''}`
-    .trim()
-    .replace(/[^a-zA-Z0-9ㄱ-ㅎ가-힣]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return (cleaned || fallback).slice(0, 40)
-}
 
 const escapeHtml = (value) =>
   `${value || ''}`
@@ -88,9 +81,11 @@ const main = () => {
   }
   ensureDir(sitesDir)
 
+  const used = new Set()
   const entries = sites.map((site, idx) => {
     const name = site.name || `내 사이트 ${idx + 1}`
-    const slug = slugify(name, `site-${idx + 1}`)
+    const slug = makeUniqueSlug(site.slug || name, used, `site-${idx + 1}`)
+    used.add(slug)
     const html = generateHTML(site.config || {})
     const sitePath = path.join(sitesDir, slug, 'index.html')
     writeFile(sitePath, html)

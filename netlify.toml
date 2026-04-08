@@ -4,3 +4,13 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/sites/:site"
+  to = "/.netlify/functions/render?slug=:site"
+  status = 200
+
+[[redirects]]
+  from = "/:site"
+  to = "/.netlify/functions/render?slug=:site"
+  status = 200

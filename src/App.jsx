@@ -30,6 +30,7 @@ export default function App() {
     renameSite,
     deleteSite,
     updateSiteConfig,
+    updateSiteSlug,
     limit,
   } = useSites(DEFAULT_CONFIG)
 
@@ -75,6 +76,7 @@ export default function App() {
         onDuplicateSite={duplicateSite}
         onRenameSite={renameSite}
         onDeleteSite={deleteSite}
+        onUpdateSiteSlug={updateSiteSlug}
       />
       <PreviewPanel html={html} siteId={currentId} siteName={currentSite?.name} />
     </div>
