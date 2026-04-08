@@ -41,13 +41,30 @@ const getStoreWithFallback = () => {
   return getStore('sites')
 }
 
+const extractSlug = (req) => {
+  const url = new URL(req.url)
+  let slug = normalizeSlug(url.searchParams.get('slug'))
+  if (slug) return slug
+
+  const originalPath =
+    req.headers.get('x-nf-original-path') ||
+    req.headers.get('x-original-path') ||
+    req.headers.get('x-forwarded-uri')
+  if (!originalPath) return ''
+
+  const cleanPath = originalPath.split('?')[0]
+  const parts = cleanPath.split('/').filter(Boolean)
+  if (!parts.length) return ''
+  if (parts[0] === 'sites') return normalizeSlug(parts[1])
+  return normalizeSlug(parts[0])
+}
+
 export default async (req) => {
   if (req.method !== 'GET') {
     return htmlResponse(405, notFoundHtml(''))
   }
 
-  const url = new URL(req.url)
-  const slug = normalizeSlug(url.searchParams.get('slug'))
+  const slug = extractSlug(req)
   if (!slug) {
     return htmlResponse(400, notFoundHtml(''))
   }
