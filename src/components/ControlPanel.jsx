@@ -258,6 +258,85 @@ export default function ControlPanel({
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   const publicUrl = currentSlug && origin ? `${origin}/${currentSlug}` : ''
   const displayUrl = publishedUrl || publicUrl
+  const buttonLinks = config.buttonLinks || {}
+  const buttonColors = config.buttonColors || {}
+  const relatedSites = sites
+    .filter((site) => site.id !== currentSiteId)
+    .map((site, idx) => ({
+      id: site.id,
+      name: site.name,
+      slug: site.slug || pickSlug(site.name, `site-${idx + 1}`),
+    }))
+
+  const updateButtonLink = (key, value) => {
+    onUpdate({ buttonLinks: { ...buttonLinks, [key]: value } })
+  }
+
+  const updateButtonColor = (key, field, value) => {
+    onUpdate({
+      buttonColors: {
+        ...buttonColors,
+        [key]: { ...(buttonColors[key] || {}), [field]: value },
+      },
+    })
+  }
+
+  const clearButtonColors = (key) => {
+    onUpdate({
+      buttonColors: {
+        ...buttonColors,
+        [key]: { bg: '', text: '', border: '' },
+      },
+    })
+  }
+
+  const isColorOverride = (key, field) => !!(buttonColors[key] && buttonColors[key][field])
+
+  const renderRelatedSites = (onPick) => {
+    if (!relatedSites.length) {
+      return <div style={{ color: '#6b7280', fontSize: '0.7rem' }}>연결할 다른 사이트가 없습니다.</div>
+    }
+    return (
+      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+        {relatedSites.map((site) => (
+          <button
+            key={site.id}
+            onClick={() => onPick(`${site.slug}`)}
+            style={{ ...S.button(false), fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+          >
+            {site.name}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  const renderColorInputs = (key, defaults) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+      {[
+        ['배경', 'bg'],
+        ['텍스트', 'text'],
+        ['테두리', 'border'],
+      ].map(([label, field]) => {
+        const fallback = defaults[field]
+        const value = buttonColors[key]?.[field] || fallback
+        return (
+          <div key={`${key}-${field}`}>
+            <div style={{ fontSize: '0.7rem', color: '#8b93b5', marginBottom: '0.2rem' }}>{label}</div>
+            <input
+              type="color"
+              value={value}
+              onChange={(e) => updateButtonColor(key, field, e.target.value)}
+              style={{ width: '100%', height: '32px', border: 'none', borderRadius: '6px', cursor: 'pointer', background: 'none' }}
+            />
+            <div style={{ fontSize: '0.65rem', color: '#6b7280', marginTop: '0.2rem' }}>
+              {isColorOverride(key, field) ? '사용중' : '기본값'}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 
   const visibilityKeys = {
     hero: 'showHero',
@@ -606,6 +685,69 @@ export default function ControlPanel({
         <input style={S.input} value={config.heroCta} onChange={(e) => onUpdate({ heroCta: e.target.value })} />
         <label style={S.label}>보조 버튼</label>
         <input style={S.input} value={config.heroCtaSecondary} onChange={(e) => onUpdate({ heroCtaSecondary: e.target.value })} />
+      </Section>
+
+      <Section title="버튼 링크 & 색상">
+        <div style={{ display: 'grid', gap: '0.8rem' }}>
+          <div style={{ border: '1px solid #2a3158', borderRadius: '10px', padding: '0.8rem', display: 'grid', gap: '0.5rem' }}>
+            <div style={{ fontWeight: 700 }}>히어로 메인 버튼</div>
+            <label style={S.label}>이동 링크</label>
+            <input
+              style={S.input}
+              value={buttonLinks.heroPrimary || ''}
+              onChange={(e) => updateButtonLink('heroPrimary', e.target.value)}
+              placeholder="예: 다른사이트#features 또는 https://example.com"
+            />
+            <div style={{ color: '#6b7280', fontSize: '0.7rem' }}>
+              슬러그만 입력하면 `/슬러그`로 이동합니다. 섹션 이동은 `#hero`, `#features` 등.
+            </div>
+            {renderRelatedSites((slug) => updateButtonLink('heroPrimary', `${slug}`))}
+            {renderColorInputs('heroPrimary', { bg: config.primary, text: '#ffffff', border: config.primary })}
+            <button onClick={() => clearButtonColors('heroPrimary')} style={S.button(false)}>색상 초기화</button>
+          </div>
+
+          <div style={{ border: '1px solid #2a3158', borderRadius: '10px', padding: '0.8rem', display: 'grid', gap: '0.5rem' }}>
+            <div style={{ fontWeight: 700 }}>히어로 보조 버튼</div>
+            <label style={S.label}>이동 링크</label>
+            <input
+              style={S.input}
+              value={buttonLinks.heroSecondary || ''}
+              onChange={(e) => updateButtonLink('heroSecondary', e.target.value)}
+              placeholder="예: 자매떡볶이-자매떡볶이#1"
+            />
+            {renderRelatedSites((slug) => updateButtonLink('heroSecondary', `${slug}`))}
+            {renderColorInputs('heroSecondary', { bg: config.bg, text: config.text, border: config.text })}
+            <button onClick={() => clearButtonColors('heroSecondary')} style={S.button(false)}>색상 초기화</button>
+          </div>
+
+          <div style={{ border: '1px solid #2a3158', borderRadius: '10px', padding: '0.8rem', display: 'grid', gap: '0.5rem' }}>
+            <div style={{ fontWeight: 700 }}>CTA 메인 버튼</div>
+            <label style={S.label}>이동 링크</label>
+            <input
+              style={S.input}
+              value={buttonLinks.ctaPrimary || ''}
+              onChange={(e) => updateButtonLink('ctaPrimary', e.target.value)}
+              placeholder="예: /다른사이트 또는 #contact"
+            />
+            {renderRelatedSites((slug) => updateButtonLink('ctaPrimary', `${slug}`))}
+            {renderColorInputs('ctaPrimary', { bg: config.primary, text: '#ffffff', border: config.primary })}
+            <button onClick={() => clearButtonColors('ctaPrimary')} style={S.button(false)}>색상 초기화</button>
+          </div>
+
+          <div style={{ border: '1px solid #2a3158', borderRadius: '10px', padding: '0.8rem', display: 'grid', gap: '0.5rem' }}>
+            <div style={{ fontWeight: 700 }}>CTA 보조 버튼</div>
+            <label style={S.label}>이동 링크</label>
+            <input
+              style={S.input}
+              value={buttonLinks.ctaSecondary || ''}
+              onChange={(e) => updateButtonLink('ctaSecondary', e.target.value)}
+              placeholder="예: #features"
+            />
+            {renderRelatedSites((slug) => updateButtonLink('ctaSecondary', `${slug}`))}
+            {renderColorInputs('ctaSecondary', { bg: config.bg, text: config.text, border: config.text })}
+            <button onClick={() => clearButtonColors('ctaSecondary')} style={S.button(false)}>색상 초기화</button>
+          </div>
+        </div>
       </Section>
 
       <Section title="레이아웃 & 스타일">

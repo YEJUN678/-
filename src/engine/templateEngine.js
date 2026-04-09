@@ -1,5 +1,6 @@
 import { TEMPLATE_PRESETS, getTemplateDefaults } from './presets.js'
 import { BASE_SECTION_ORDER } from './sections.js'
+import { normalizeSlug } from '../utils/slug.js'
 
 const safeText = (value, fallback) => {
   const v = `${value ?? ''}`.trim()
@@ -16,6 +17,42 @@ const escapeHtml = (value) =>
 
 const isValidHex = (value) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value)
 const safeColor = (value, fallback) => (isValidHex(value) ? value : fallback)
+
+const normalizeLink = (value, fallback) => {
+  const raw = `${value ?? ''}`.trim()
+  if (raw) return raw
+  return `${fallback ?? ''}`.trim()
+}
+
+const resolveHref = (value, fallback) => {
+  const raw = normalizeLink(value, fallback)
+  if (!raw) return '#'
+  const lower = raw.toLowerCase()
+  if (
+    raw.startsWith('#') ||
+    raw.startsWith('/') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('mailto:') ||
+    lower.startsWith('tel:')
+  ) {
+    return raw
+  }
+  const [path, hash] = raw.split('#')
+  const slug = normalizeSlug(path) || path
+  return `/${slug}${hash ? `#${hash}` : ''}`
+}
+
+const resolveButtonStyle = (value) => {
+  const bg = isValidHex(value?.bg) ? value.bg : ''
+  const text = isValidHex(value?.text) ? value.text : ''
+  const border = isValidHex(value?.border) ? value.border : ''
+  const styles = []
+  if (bg) styles.push(`background:${bg}`)
+  if (text) styles.push(`color:${text}`)
+  if (border) styles.push(`border-color:${border}`)
+  return styles.length ? ` style="${styles.join(';')}"` : ''
+}
 
 const hexToRgb = (hex) => {
   const clean = hex.replace('#', '')
@@ -83,6 +120,8 @@ export function generateHTML(cfg) {
   const cta = normalizeCta(cfg.cta, preset.defaults.cta)
   const contact = normalizeContact(cfg.contact, preset.defaults.contact)
   const customSections = ensureArray(cfg.customSections)
+  const buttonLinks = cfg.buttonLinks || {}
+  const buttonColors = cfg.buttonColors || {}
 
   const primary = safeColor(cfg.primary, '#6366f1')
   const bg = safeColor(cfg.bg, '#ffffff')
@@ -175,6 +214,14 @@ export function generateHTML(cfg) {
 
   const revealClass = animReveal ? 'reveal' : ''
   const buttonRadius = buttonStyle === 'square' ? '8px' : buttonStyle === 'soft' ? '14px' : '999px'
+  const heroPrimaryHref = resolveHref(buttonLinks.heroPrimary, '#contact')
+  const heroSecondaryHref = resolveHref(buttonLinks.heroSecondary, '#features')
+  const ctaPrimaryHref = resolveHref(buttonLinks.ctaPrimary, '#contact')
+  const ctaSecondaryHref = resolveHref(buttonLinks.ctaSecondary, '#features')
+  const heroPrimaryStyle = resolveButtonStyle(buttonColors.heroPrimary)
+  const heroSecondaryStyle = resolveButtonStyle(buttonColors.heroSecondary)
+  const ctaPrimaryStyle = resolveButtonStyle(buttonColors.ctaPrimary)
+  const ctaSecondaryStyle = resolveButtonStyle(buttonColors.ctaSecondary)
 
   const renderCustomSection = (section, idx) => {
     const titleText = escapeHtml(section.title || `새 섹션 ${idx + 1}`)
@@ -264,8 +311,8 @@ export function generateHTML(cfg) {
               <h1>${escapeHtml(title)}</h1>
               <p>${escapeHtml(slogan)}</p>
               <div class="hero-actions">
-                <a class="btn primary" href="#contact">${escapeHtml(heroCta)}</a>
-                <a class="btn ghost" href="#features">${escapeHtml(heroCtaSecondary)}</a>
+                <a class="btn primary" href="${escapeHtml(heroPrimaryHref)}"${heroPrimaryStyle}>${escapeHtml(heroCta)}</a>
+                <a class="btn ghost" href="${escapeHtml(heroSecondaryHref)}"${heroSecondaryStyle}>${escapeHtml(heroCtaSecondary)}</a>
               </div>
             </div>
           </div>
@@ -430,8 +477,8 @@ export function generateHTML(cfg) {
             <p style="color:var(--muted);margin-top:0.6rem">${escapeHtml(cta.desc)}</p>
           </div>
           <div class="cta-actions">
-            <a class="btn primary" href="#contact">${escapeHtml(cta.primary)}</a>
-            <a class="btn ghost" href="#features">${escapeHtml(cta.secondary)}</a>
+            <a class="btn primary" href="${escapeHtml(ctaPrimaryHref)}"${ctaPrimaryStyle}>${escapeHtml(cta.primary)}</a>
+            <a class="btn ghost" href="${escapeHtml(ctaSecondaryHref)}"${ctaSecondaryStyle}>${escapeHtml(cta.secondary)}</a>
           </div>
         </div>
       </div>
@@ -744,7 +791,7 @@ export function generateHTML(cfg) {
       </div>
       <div class="nav-actions">
         <button class="btn ghost mobile-toggle" onclick="toggleMenu()">메뉴</button>
-        <a class="btn primary" href="#contact">${escapeHtml(heroCta)}</a>
+        <a class="btn primary" href="${escapeHtml(heroPrimaryHref)}"${heroPrimaryStyle}>${escapeHtml(heroCta)}</a>
       </div>
     </div>
     <div id="mobile-menu" class="mobile-menu container">

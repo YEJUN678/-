@@ -56,6 +56,18 @@ export const DEFAULT_CONFIG = {
   logoImage: '',
   galleryImages: [],
   customSections: [],
+  buttonLinks: {
+    heroPrimary: '',
+    heroSecondary: '',
+    ctaPrimary: '',
+    ctaSecondary: '',
+  },
+  buttonColors: {
+    heroPrimary: { bg: '', text: '', border: '' },
+    heroSecondary: { bg: '', text: '', border: '' },
+    ctaPrimary: { bg: '', text: '', border: '' },
+    ctaSecondary: { bg: '', text: '', border: '' },
+  },
 }
 
 const initialState = () => ({

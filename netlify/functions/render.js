@@ -2,8 +2,15 @@ import { getStore } from '@netlify/blobs'
 import { generateHTML } from '../../src/engine/templateEngine.js'
 import { normalizeSlug } from '../../src/utils/slug.js'
 
-const htmlResponse = (statusCode, body) =>
-  new Response(body, { status: statusCode, headers: { 'Content-Type': 'text/html; charset=utf-8' } })
+const htmlResponse = (statusCode, body, extraHeaders = {}) =>
+  new Response(body, {
+    status: statusCode,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store, max-age=0',
+      ...extraHeaders,
+    },
+  })
 
 const notFoundHtml = (slug) => `<!DOCTYPE html>
 <html lang="ko">
@@ -95,7 +102,7 @@ export default async (req) => {
   const store = getStoreWithFallback()
   const raw = await store.get(slug)
   if (raw === null) {
-    return htmlResponse(404, notFoundHtml(slug))
+    return htmlResponse(404, notFoundHtml(slug), { 'X-Resolved-Slug': slug })
   }
 
   let site = null
@@ -106,5 +113,5 @@ export default async (req) => {
   }
 
   const html = generateHTML(site?.config || {})
-  return htmlResponse(200, html)
+  return htmlResponse(200, html, { 'X-Resolved-Slug': slug })
 }
